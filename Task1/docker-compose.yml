@@ -1,0 +1,65 @@
+# Задание 1: "точка-точка" — одна очередь, три конкурирующих получателя.
+
+services:
+  # Брокер сообщений
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-task1
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # веб-панель
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: app
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Диспетчер: отправил заявки и завершился (restart не нужен)
+  dispatcher:
+    build: .
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+
+  # Бригады: один и тот же образ, три контейнера на одну очередь
+  brigade-1:
+    build: .
+    command: ["python", "-m", "app.brigade"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      BRIGADE_NAME: brigade-1
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  brigade-2:
+    build: .
+    command: ["python", "-m", "app.brigade"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      BRIGADE_NAME: brigade-2
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  brigade-3:
+    build: .
+    command: ["python", "-m", "app.brigade"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      BRIGADE_NAME: brigade-3
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped

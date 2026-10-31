@@ -1,0 +1,68 @@
+# Задание 2: "публикация-подписка" — один fanout, три очереди, каждому отделу своя копия.
+
+services:
+  # Брокер сообщений (порты другие, чтобы не конфликтовать с Task1)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-task2
+    ports:
+      - "5673:5672"      # AMQP
+      - "15673:15672"    # веб-панель: http://localhost:15673
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: app
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Издатель: опубликовал новость и завершился
+  publisher:
+    build: .
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+
+  # Три отдела. Один и тот же код, у каждого своя очередь и имя.
+  accounting:
+    build: .
+    command: ["python", "-m", "app.consumer"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      DEPT_NAME: Бухгалтерия
+      QUEUE: price.accounting
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  oildepot:
+    build: .
+    command: ["python", "-m", "app.consumer"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      DEPT_NAME: Нефтебаза
+      QUEUE: price.oildepot
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  analytics:
+    build: .
+    command: ["python", "-m", "app.consumer"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+      DEPT_NAME: Аналитика
+      QUEUE: price.analytics
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
