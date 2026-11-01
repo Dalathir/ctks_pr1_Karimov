@@ -1,0 +1,100 @@
+
+services:
+  # Брокер сообщений
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-task1
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # веб-панель
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: app
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Клиент: создает заявки и принимет сметы
+  client:
+    build: .
+    command: ["python", "-m", "app.entities.client"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+
+  # Разделитель: заявка -> отдельные виды работ
+  splitter:
+    build: .
+    command: ["python", "-m", "app.composite_message_handler.splitter"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  # Маршрутизатор: работа -> очередь нужного исполнителя
+  router:
+    build: .
+    command: ["python", "-m", "app.composite_message_handler.router"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  # Исполнитель: бурение
+  drilling:
+    build: .
+    command: ["python", "-m", "app.entities.drilling"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  # Исполнитель: электрика
+  electrical:
+    build: .
+    command: ["python", "-m", "app.entities.electrical"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  # Исполнитель: логистика
+  logistics:
+    build: .
+    command: ["python", "-m", "app.entities.logistics"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  # Агрегатор: собирает расчёты и отправляет смету клиенту
+  aggregator:
+    build: .
+    command: ["python", "-m", "app.composite_message_handler.aggregator"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: app
+      RABBITMQ_PASS: app
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
